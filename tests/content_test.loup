@@ -1,0 +1,44 @@
+@mode(host.dual)
+
+# Tests for reading, combining and writing bytes (commands/content.loup).
+
+from debug.assert import (expect, expectEq);
+from io.fs import (createDir, writeText, removeDir, isDir, readText);
+from commands.content import (append_file, finish, write_checked, holds, same_files, CTRL_Z);
+
+func test_text_and_binary_reads(): void {
+    let root = "build/tmp/content_read";
+    if (isDir(root)) {
+        removeDir(root);
+    }
+    createDir(root);
+    writeText(root + "/z.txt", "ab" + str(char.of(26)) + "cd");
+    var bin: list[int] = [];
+    append_file(edits: bin, root + "/z.txt", false);
+    expectEq(bin.len(), 5, "binary keeps everything");
+    var text: list[int] = [];
+    append_file(edits: text, root + "/z.txt", true);
+    expectEq(text.len(), 2, "text stops at Ctrl-Z");
+    expectEq(finish(text, true).len(), 3, "a text destination ends with Ctrl-Z");
+    expectEq(finish(text, true)[2], CTRL_Z, "the Ctrl-Z");
+    expectEq(finish(text, false).len(), 2, "binary adds nothing");
+    removeDir(root);
+}
+
+func test_write_and_compare(): void {
+    let root = "build/tmp/content_write";
+    if (isDir(root)) {
+        removeDir(root);
+    }
+    createDir(root);
+    expect(write_checked(root + "/out.txt", [104, 105, 10]), "written");
+    expectEq(readText(root + "/out.txt"), "hi\n", "content");
+    expect(holds(root + "/out.txt", [104, 105, 10]), "holds");
+    expect(!holds(root + "/out.txt", [104, 105]), "different length");
+    writeText(root + "/same.txt", "hi\n");
+    writeText(root + "/other.txt", "ho\n");
+    expect(same_files(root + "/out.txt", root + "/same.txt"), "same");
+    expect(!same_files(root + "/out.txt", root + "/other.txt"), "different");
+    expect(!same_files(root + "/out.txt", root + "/none.txt"), "missing");
+    removeDir(root);
+}

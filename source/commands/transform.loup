@@ -1,0 +1,97 @@
+@mode(host.dual)
+
+# The cmd.exe wildcard transform: the new name a target mask such as
+# `*.bak` or `b?.log` gives a source name (copy and ren with a wildcard
+# target). The mask is read left to right against a position in the source
+# name:
+#
+#   ?        copy the next source character unless it is `.` or the end
+#            (then copy nothing and stay)
+#   * (last) copy the rest of the source
+#   *?       copy the rest of the source
+#   *c       copy the source through the LAST `c` after the position
+#            (case-sensitive); without one, copy the rest and then `c`
+#   .        skip the source through its next `.`, write `.`
+#   c        write `c`, skip one source character
+#
+# Trailing `.` and spaces are removed from the result, since Windows names
+# cannot end with them.
+
+func chars_of(text: string): list[string] {
+    var out: list[string] = [];
+    for (ch in text) {
+        out.push(ch);
+    }
+    return out;
+}
+
+func append_range(edits out: list[string], src: list[string], start: int, stop: int): void {
+    for (k in start..stop) {
+        out.push(src[k]);
+    }
+}
+
+pub func transform_name(source: string, mask: string): string {
+    let src = chars_of(source);
+    let m = chars_of(mask);
+    let n = src.len();
+    var out: list[string] = [];
+    var pos = 0;
+    var i = 0;
+    while (i < m.len()) {
+        let c = m[i];
+        if (c == "?") {
+            if (pos < n and src[pos] != ".") {
+                out.push(src[pos]);
+                pos += 1;
+            }
+            i += 1;
+        } else if (c == "*") {
+            let next = if (i + 1 < m.len()) { m[i + 1] } else { "" };
+            if (next == "" or next == "?") {
+                append_range(edits: out, src, pos, n);
+                pos = n;
+            } else {
+                var last = -1;
+                for (k in pos..n) {
+                    if (src[k] == next) {
+                        last = k;
+                    }
+                }
+                if (last >= 0) {
+                    append_range(edits: out, src, pos, last + 1);
+                    pos = last + 1;
+                } else {
+                    append_range(edits: out, src, pos, n);
+                    pos = n;
+                    out.push(next);
+                }
+            }
+            i += if (next == "") { 1 } else { 2 };
+        } else if (c == ".") {
+            while (pos < n and src[pos] != ".") {
+                pos += 1;
+            }
+            if (pos < n) {
+                pos += 1;
+            }
+            out.push(".");
+            i += 1;
+        } else {
+            out.push(c);
+            if (pos < n) {
+                pos += 1;
+            }
+            i += 1;
+        }
+    }
+    var end = out.len();
+    while (end > 0 and (out[end - 1] == "." or out[end - 1] == " ")) {
+        end -= 1;
+    }
+    var kept: list[string] = [];
+    for (k in 0..end) {
+        kept.push(out[k]);
+    }
+    return kept.join("");
+}

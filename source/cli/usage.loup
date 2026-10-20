@@ -1,28 +1,32 @@
 @mode(host.dual)
 
-from appinfo import (APP_NAME, APP_VERSION, APP_SUMMARY);
-from cli.args import (DEFAULT_GREETING);
+from appinfo import (APP_NAME, APP_VERSION);
 
+# The text of `copy /?`: a short summary of this recreation's syntax and
+# switches.
 pub func usage(): string {
     let lines = [
-        i"usage: {$ APP_NAME $} [OPTIONS] COMMAND [ARGS...]",
+        "Copy files, or combine several files into one.",
         "",
-        APP_SUMMARY,
+        "COPY [/V] [/Y | /-Y] [/A | /B] source [/A | /B] [+ source [/A | /B] ...]",
+        "     [destination [/A | /B]]",
         "",
-        "Commands:",
-        "  hello [NAME]          Print a greeting (NAME defaults to 'world')",
-        "  help                  Show this help",
-        "",
-        "Options:",
-        i"  -g, --greeting TEXT   Greeting used by 'hello' (default: {$ DEFAULT_GREETING $})",
-        "      --shout           Print the greeting in upper case",
-        "  -v, --verbose         Print diagnostic messages to stderr",
-        "  -h, --help            Show this help and exit",
-        "  -V, --version         Show the version and exit",
+        "  source       A file, a pattern with * and ?, or a directory (its files).",
+        "               Join sources with + to combine them into one file.",
+        "  destination  A directory, a file name, or a pattern such as *.bak.",
+        "               Without it, files go to the current directory (joined",
+        "               sources are appended to the first one).",
+        "  /A           Text: a source ends at its first Ctrl-Z, and the",
+        "               destination gets one at the end (the default when combining).",
+        "  /B           Binary: bytes as they are (the default for a plain copy).",
+        "  /V           Check each new file against its sources.",
+        "  /Y, /-Y      Replace existing files without asking, or ask first.",
+        "               Without either, copy asks unless COPYCMD contains /Y.",
+        "  /D /N /Z /L  Accepted for compatibility; they change nothing.",
     ];
     return lines.join("\n");
 }
 
 pub func version_line(): string {
-    return i"{$ APP_NAME $} {$ APP_VERSION $}";
+    return i"{$ APP_NAME $} (loup-cmd-{$ APP_NAME $}) {$ APP_VERSION $}";
 }

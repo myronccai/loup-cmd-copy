@@ -1,0 +1,72 @@
+@mode(host.dual)
+
+# The wildcard transform, table-driven: source name, target mask, result.
+
+from debug.assert import (expectEq);
+from commands.transform import (transform_name);
+
+func check_table(rows: list[list[string]]): void {
+    for (row in rows) {
+        expectEq(transform_name(row[0], row[1]), row[2], row[0] + " with " + row[1]);
+    }
+}
+
+func test_star_extension(): void {
+    check_table([
+        ["a.txt", "*.bak", "a.bak"],
+        ["a.b.txt", "*.bak", "a.b.bak"],
+        ["README", "*.bak", "README.bak"],
+        ["a.txt", "*", "a.txt"],
+        ["a.txt", "*.*", "a.txt"],
+        ["a.tar.gz", "*.*", "a.tar.gz"],
+    ]);
+}
+
+func test_question_marks(): void {
+    check_table([
+        ["a1.log", "b?.log", "b1.log"],
+        ["ab.log", "b?.log", "bb.log"],
+        ["a.log", "b?.log", "b.log"],
+        ["abc.txt", "?????.log", "abc.log"],
+        ["abcdef.txt", "??.txt", "ab.txt"],
+    ]);
+}
+
+func test_literal_prefixes(): void {
+    check_table([
+        ["file.txt", "new.*", "new.txt"],
+        ["file.tar.gz", "new.*", "new.tar.gz"],
+        ["file", "new.*", "new"],
+        ["report1.txt", "x*", "xeport1.txt"],
+    ]);
+}
+
+func test_star_before_a_character(): void {
+    check_table([
+        ["abcabc.txt", "*c.log", "abcabc.log"],
+        ["abc.txt", "*q.log", "abc.txtq.log"],
+        ["abc.txt", "*x.log", "abc.tx.log"],
+        ["a.txt", "*?", "a.txt"],
+    ]);
+}
+
+func test_more_masks(): void {
+    check_table([
+        ["a.b.c", "*.d", "a.b.d"],
+        ["abc", "?a?", "aac"],
+        ["name.txt", "??????.*", "name.txt"],
+        ["x.txt", "*.txt.bak", "x.txt.bak"],
+        ["a.txt", ".*", ".txt"],
+        ["abc.txt", "*.?", "abc.t"],
+        ["photo.JPG", "*.jpg", "photo.jpg"],
+        ["report.txt", "old_*", "old_rt.txt"],
+    ]);
+}
+
+func test_trailing_dots_and_spaces_go(): void {
+    check_table([
+        ["a.txt", "*.", "a"],
+        ["README", "*.", "README"],
+        ["a.txt", "?.", "a"],
+    ]);
+}

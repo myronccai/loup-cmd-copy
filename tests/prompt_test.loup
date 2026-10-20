@@ -1,0 +1,18 @@
+@mode(host.dual)
+
+from debug.assert import (expectEq);
+from commands.prompt import (parse_answer, overwrite_question, ANSWER_YES, ANSWER_NO, ANSWER_ALL,
+    ANSWER_INVALID);
+
+func test_parse_answer(): void {
+    expectEq(parse_answer("y"), ANSWER_YES, "y");
+    expectEq(parse_answer("Yes"), ANSWER_YES, "Yes");
+    expectEq(parse_answer("  n"), ANSWER_NO, "blank first");
+    expectEq(parse_answer("ALL"), ANSWER_ALL, "ALL");
+    expectEq(parse_answer(""), ANSWER_INVALID, "empty");
+    expectEq(parse_answer("x"), ANSWER_INVALID, "other");
+}
+
+func test_question(): void {
+    expectEq(overwrite_question("\\t\\a.txt"), "Overwrite \\t\\a.txt? (Yes/No/All): ", "question");
+}

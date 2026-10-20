@@ -1,0 +1,83 @@
+@mode(host.dual)
+
+# File contents as bytes: reading in text (/A) or binary (/B) mode,
+# combining, writing and verifying. Loup 1.26.0 has no bytes concatenation
+# and its native `bytes == bytes` is unreliable, so contents are combined as
+# a list of ints (`bytesFromInts` makes the bytes) and compared byte by
+# byte.
+
+from io.fs import (isFile, readBytes, writeBytes);
+
+# The end-of-file character of text mode.
+pub const CTRL_Z: int = 26;
+
+# Appends a file's bytes to `out`; in text mode, only those before its
+# first Ctrl-Z.
+pub func append_file(edits out: list[int], path: string, text_mode: bool): void {
+    let data = readBytes(path);
+    for (k in 0..data.len()) {
+        let b = data[k];
+        if (text_mode and b == CTRL_Z) {
+            return;
+        }
+        out.push(b);
+    }
+}
+
+# The bytes a destination gets: the data, plus a Ctrl-Z in text mode.
+pub func finish(data: list[int], text_mode: bool): list[int] {
+    var out: list[int] = [];
+    for (b in data) {
+        out.push(b);
+    }
+    if (text_mode) {
+        out.push(CTRL_Z);
+    }
+    return out;
+}
+
+# Writes the bytes to `path` and reports whether the file now holds exactly
+# them (native file operations fail silently).
+pub func write_checked(path: string, data: list[int]): bool {
+    try {
+        writeBytes(path, bytesFromInts(data));
+    } catch (Exception as e) {
+        return false;
+    }
+    return holds(path, data);
+}
+
+# Whether the file holds exactly these bytes.
+pub func holds(path: string, data: list[int]): bool {
+    if (!isFile(path)) {
+        return false;
+    }
+    let got = readBytes(path);
+    if (got.len() != data.len()) {
+        return false;
+    }
+    for (k in 0..got.len()) {
+        if (got[k] != data[k]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+# Whether two files have the same bytes.
+pub func same_files(a: string, b: string): bool {
+    if (!isFile(a) or !isFile(b)) {
+        return false;
+    }
+    let x = readBytes(a);
+    let y = readBytes(b);
+    if (x.len() != y.len()) {
+        return false;
+    }
+    for (k in 0..x.len()) {
+        if (x[k] != y[k]) {
+            return false;
+        }
+    }
+    return true;
+}

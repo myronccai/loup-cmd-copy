@@ -1,0 +1,113 @@
+@mode(host.dual)
+
+# copy: carries out a plan (commands/plan.loup): prints the source names,
+# asks before overwriting, writes, checks, and prints `N file(s) copied.`
+
+from appinfo import (EXIT_OK, EXIT_FAILURE);
+from cli.args import (Options, should_ask);
+from commands.content import (append_file, finish, same_files, write_checked);
+from commands.cwd import (absolute_path, current_dir);
+from commands.plan import (Job, Plan, plan_copy);
+from commands.prompt import (ANSWER_ALL, ANSWER_YES, ask_overwrite);
+from io.fs import (copy, isDir, isFile);
+from win.messages import (MSG_ACCESS_DENIED);
+from win.paths import (display_path);
+
+pub const MSG_ONTO_ITSELF: string = "The file cannot be copied onto itself.";
+pub const MSG_VERIFY: string = "The copy does not match the source.";
+
+func pad_left(text: string, width: int): string {
+    var parts: list[string] = [];
+    for (i in text.len()..width) {
+        parts.push(" ");
+    }
+    parts.push(text);
+    return parts.join("");
+}
+
+# `        2 file(s) copied.`
+pub func summary_line(count: int): string {
+    return pad_left(str(count), 9) + " file(s) copied.";
+}
+
+# The bytes a job writes, read from its sources in their modes.
+pub func job_bytes(job: Job): list[int] {
+    var data: list[int] = [];
+    for (s in job.sources) {
+        append_file(edits: data, s.path, s.text);
+    }
+    return finish(data, job.text_dest);
+}
+
+func try_copy(src: string, dst: string): void {
+    try {
+        copy(src, dst);
+    } catch (Exception as e) {
+    }
+}
+
+# Writes one job; "" when done, else the message to print.
+pub func write_job(job: Job, verify: bool): string {
+    let plain = job.sources.len() == 1 and !job.sources[0].text and !job.text_dest;
+    if (plain) {
+        let src = job.sources[0].path;
+        try_copy(src, job.dest);
+        if (!same_files(src, job.dest)) {
+            return if (verify and isFile(job.dest)) { MSG_VERIFY } else { MSG_ACCESS_DENIED };
+        }
+        return "";
+    }
+    let data = job_bytes(job);
+    if (!write_checked(job.dest, data)) {
+        return if (verify and isFile(job.dest)) { MSG_VERIFY } else { MSG_ACCESS_DENIED };
+    }
+    return "";
+}
+
+pub func run_copy(opts: Options): int {
+    let plan = plan_copy(opts);
+    if (plan.error.len() > 0) {
+        printErr(plan.error);
+        println(summary_line(0));
+        return EXIT_FAILURE;
+    }
+    let cwd = current_dir();
+    var ask = should_ask(opts.confirm, env("COPYCMD") ?? "");
+    var copied = 0;
+    var status = EXIT_OK;
+    for (job in plan.jobs) {
+        if (plan.show_names) {
+            for (s in job.sources) {
+                println(display_path(s.path));
+            }
+        }
+        let dest_abs = absolute_path(job.dest, cwd);
+        if (!plan.combine and absolute_path(job.sources[0].path, cwd) == dest_abs) {
+            printErr(MSG_ONTO_ITSELF);
+            status = EXIT_FAILURE;
+            continue;
+        }
+        if (isDir(job.dest)) {
+            printErr(MSG_ACCESS_DENIED);
+            status = EXIT_FAILURE;
+            continue;
+        }
+        if (ask and !job.append and isFile(job.dest)) {
+            let answer = ask_overwrite(display_path(job.dest));
+            if (answer == ANSWER_ALL) {
+                ask = false;
+            } else if (answer != ANSWER_YES) {
+                continue;
+            }
+        }
+        let failure = write_job(job, opts.verify);
+        if (failure.len() > 0) {
+            printErr(failure);
+            status = EXIT_FAILURE;
+            continue;
+        }
+        copied += 1;
+    }
+    println(summary_line(copied));
+    return status;
+}

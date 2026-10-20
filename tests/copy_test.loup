@@ -1,0 +1,31 @@
+@mode(host.dual)
+
+from debug.assert import (expect, expectEq);
+from io.fs import (createDir, writeText, removeDir, isDir, readText);
+from cli.args import (parse_args);
+from commands.copy import (summary_line, job_bytes, write_job);
+from commands.plan import (plan_copy);
+
+func test_summary_line(): void {
+    expectEq(summary_line(1), "        1 file(s) copied.", "one");
+    expectEq(summary_line(0), "        0 file(s) copied.", "none");
+    expectEq(summary_line(123), "      123 file(s) copied.", "many");
+}
+
+func test_jobs(): void {
+    let root = "build/tmp/copy_jobs";
+    if (isDir(root)) {
+        removeDir(root);
+    }
+    createDir(root);
+    writeText(root + "/a.txt", "a\n");
+    writeText(root + "/b.txt", "b\n");
+    let plan = plan_copy(parse_args([root + "/a.txt+" + root + "/b.txt", root + "/ab.txt"]).unwrap());
+    expectEq(job_bytes(plan.jobs[0]).len(), 5, "a, b and a Ctrl-Z");
+    expectEq(write_job(plan.jobs[0], true), "", "written and verified");
+    expectEq(readText(root + "/ab.txt"), "a\nb\n" + str(char.of(26)), "combined");
+    let plain = plan_copy(parse_args([root + "/a.txt", root + "/c.txt"]).unwrap());
+    expectEq(write_job(plain.jobs[0], false), "", "plain copy");
+    expectEq(readText(root + "/c.txt"), "a\n", "copied");
+    removeDir(root);
+}

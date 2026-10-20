@@ -1,0 +1,188 @@
+@mode(host.dual)
+
+# Planning a copy: which files are read, which files are written, and in
+# which mode. Pure apart from looking at the file system.
+#
+# - Sources are files, patterns (matching files) or directories (their
+#   files), joined with `+`.
+# - Copy combines (concatenates) when sources are joined with `+`, or when a
+#   pattern or directory goes to one file name. Combining reads and writes
+#   in text mode (/A) unless /B says otherwise; a plain copy is binary.
+# - Without a destination, files go to the current directory; joined
+#   sources without a destination are appended to the first one.
+# - A destination with wildcards renames each file (`*.txt` to `*.bak`).
+
+from cli.args import (FileArg, Options, MODE_ASCII, MODE_DEFAULT);
+from commands.transform import (transform_name);
+from io.fs import (isDir, isFile);
+from win.messages import (MSG_FILE_NOT_FOUND, MSG_INVALID_NAME, MSG_PATH_NOT_FOUND);
+from win.paths import (base_name, fs_path, join_path, parent_dir, split_path, strip_trailing_separators);
+from win.wildcard import (MATCH_FILES, expand, has_wildcards, list_matches, wildcard_in_directory);
+
+# One file to read.
+pub struct SourceFile {
+    pub path: string;     # fs form, as typed (`sub/a.txt`)
+    pub text: bool;       # read in text mode: stop at the first Ctrl-Z
+}
+
+# One file to write, from one source (a copy) or several (combining).
+pub struct Job {
+    pub dest: string;              # fs form
+    pub sources: list[SourceFile];
+    pub text_dest: bool;           # end the file with a Ctrl-Z
+    pub append: bool;              # the destination is the first source
+}
+
+pub struct Plan {
+    pub jobs: list[Job];
+    pub combine: bool;
+    pub show_names: bool;          # print each source as it is read
+    pub error: string;             # "" or the message that stops the copy
+}
+
+func make_source(path: string, text: bool): SourceFile {
+    return SourceFile(path = path, text = text);
+}
+
+func make_job(dest: string, sources: list[SourceFile], text_dest: bool, append: bool): Job {
+    return Job(dest = dest, sources = sources, text_dest = text_dest, append = append);
+}
+
+func plan_error(message: string): Plan {
+    let none: list[Job] = [];
+    return Plan(jobs = none, combine = false, show_names = false, error = message);
+}
+
+# A file's text mode: its own /A or /B, else the default for the operation.
+func is_text(mode: int, combining: bool): bool {
+    if (mode == MODE_DEFAULT) {
+        return combining;
+    }
+    return mode == MODE_ASCII;
+}
+
+# The files one source names (paths as typed), or an error message.
+struct Found {
+    paths: list[string];
+    many: bool;          # a pattern or a directory
+    error: string;
+}
+
+func find_source(name: string): Found {
+    var paths: list[string] = [];
+    if (wildcard_in_directory(name)) {
+        return Found(paths = paths, many = false, error = MSG_INVALID_NAME);
+    }
+    if (has_wildcards(name)) {
+        paths = expand(name, MATCH_FILES);
+        let error = if (paths.len() == 0) { MSG_FILE_NOT_FOUND } else { "" };
+        return Found(paths = paths, many = true, error = error);
+    }
+    let p = strip_trailing_separators(fs_path(name));
+    if (p.len() > 0 and isDir(p)) {
+        for (entry in list_matches(p, "*", MATCH_FILES)) {
+            paths.push(join_path(p, entry));
+        }
+        let error = if (paths.len() == 0) { MSG_FILE_NOT_FOUND } else { "" };
+        return Found(paths = paths, many = true, error = error);
+    }
+    if (isFile(p)) {
+        paths.push(p);
+        return Found(paths = paths, many = false, error = "");
+    }
+    let parent = parent_dir(p);
+    if (parent.len() > 0 and !isDir(parent)) {
+        return Found(paths = paths, many = false, error = MSG_PATH_NOT_FOUND);
+    }
+    return Found(paths = paths, many = false, error = MSG_FILE_NOT_FOUND);
+}
+
+# Where the destination says files go.
+const DEST_DIR: int = 0;       # into a directory (keep the names)
+const DEST_FILE: int = 1;      # one file name
+const DEST_PATTERN: int = 2;   # rename each file with a wildcard mask
+
+pub func plan_copy(opts: Options): Plan {
+    # Sources, with their modes.
+    var paths: list[string] = [];
+    var modes: list[int] = [];
+    var many = false;
+    for (s in opts.sources) {
+        let found = find_source(s.name);
+        if (found.error.len() > 0) {
+            return plan_error(found.error);
+        }
+        if (found.many) {
+            many = true;
+        }
+        for (p in found.paths) {
+            paths.push(p);
+            modes.push(s.mode);
+        }
+    }
+
+    # The destination.
+    var kind = DEST_DIR;
+    var target = "";
+    var dest_mode = MODE_DEFAULT;
+    if (opts.has_dest) {
+        dest_mode = opts.dest.mode;
+        let d = fs_path(opts.dest.name);
+        target = strip_trailing_separators(d);
+        if (wildcard_in_directory(opts.dest.name)) {
+            return plan_error(MSG_INVALID_NAME);
+        }
+        if (has_wildcards(target)) {
+            kind = DEST_PATTERN;
+            let parent = split_path(target).dir;
+            if (parent.len() > 0 and !isDir(parent)) {
+                return plan_error(MSG_PATH_NOT_FOUND);
+            }
+        } else if (isDir(target)) {
+            kind = DEST_DIR;
+        } else {
+            kind = DEST_FILE;
+            let parent = parent_dir(target);
+            if (d.len() > target.len() or (parent.len() > 0 and !isDir(parent))) {
+                return plan_error(MSG_PATH_NOT_FOUND);
+            }
+        }
+    }
+
+    let combine = opts.joined or (kind == DEST_FILE and (many or paths.len() > 1));
+    var jobs: list[Job] = [];
+    if (combine) {
+        var sources: list[SourceFile] = [];
+        for (k in 0..paths.len()) {
+            sources.push(make_source(paths[k], is_text(modes[k], true)));
+        }
+        var dest = target;
+        var append = false;
+        if (!opts.has_dest) {
+            # Appending to the first source: it is written in its own mode.
+            dest = paths[0];
+            append = true;
+            dest_mode = modes[0];
+        } else if (kind == DEST_DIR) {
+            dest = join_path(target, base_name(paths[0]));
+        } else if (kind == DEST_PATTERN) {
+            let parts = split_path(target);
+            dest = join_path(parts.dir, transform_name(base_name(paths[0]), parts.name));
+        }
+        jobs.push(make_job(dest, sources, is_text(dest_mode, true), append));
+    } else {
+        for (k in 0..paths.len()) {
+            let src = paths[k];
+            var dest = target;
+            if (kind == DEST_DIR) {
+                dest = join_path(target, base_name(src));
+            } else if (kind == DEST_PATTERN) {
+                let parts = split_path(target);
+                dest = join_path(parts.dir, transform_name(base_name(src), parts.name));
+            }
+            jobs.push(make_job(dest, [make_source(src, is_text(modes[k], false))],
+                is_text(dest_mode, false), false));
+        }
+    }
+    return Plan(jobs = jobs, combine = combine, show_names = combine or many, error = "");
+}

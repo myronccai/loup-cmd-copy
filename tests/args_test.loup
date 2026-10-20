@@ -1,64 +1,75 @@
 @mode(host.dual)
 
 from debug.assert import (expect, expectEq);
-from cli.args import (parse_args, DEFAULT_GREETING);
+from cli.args import (Options, parse_args, should_ask, copycmd_confirm, MODE_DEFAULT, MODE_ASCII,
+    MODE_BINARY, CONFIRM_DEFAULT, CONFIRM_ASK, CONFIRM_NEVER);
 
-func test_no_arguments(): void {
+func names(opts: Options): string {
+    var out: list[string] = [];
+    for (s in opts.sources) {
+        out.push(s.name);
+    }
+    return out.join(",");
+}
+
+func test_source_and_destination(): void {
+    let opts = parse_args(["a.txt", "sub\\"]).unwrap();
+    expectEq(names(opts), "a.txt", "one source");
+    expect(opts.has_dest and opts.dest.name == "sub\\", "destination");
+    expect(!opts.joined, "not joined");
+    let only = parse_args(["a.txt"]).unwrap();
+    expect(!only.has_dest, "no destination");
+}
+
+func test_plus_forms(): void {
+    expectEq(names(parse_args(["a+b+c", "d"]).unwrap()), "a,b,c", "glued");
+    expectEq(names(parse_args(["a", "+", "b", "d"]).unwrap()), "a,b", "spaced");
+    expectEq(names(parse_args(["a+", "b", "d"]).unwrap()), "a,b", "trailing plus");
+    expectEq(names(parse_args(["a", "+b", "d"]).unwrap()), "a,b", "leading plus");
+    let joined = parse_args(["a+b"]).unwrap();
+    expect(joined.joined and !joined.has_dest, "joined, no destination");
+    expectEq(parse_args(["a", "+", "b", "d"]).unwrap().dest.name, "d", "destination after a join");
+}
+
+func test_syntax_errors(): void {
     let none: list[string] = [];
-    let opts = parse_args(none).unwrap();
-    expectEq(opts.command, "", "no command");
-    expectEq(opts.operands.len(), 0, "no operands");
-    expectEq(opts.greeting, DEFAULT_GREETING, "default greeting");
-    expect(!opts.help and !opts.version and !opts.verbose and !opts.shout, "no flags set");
+    expect(parse_args(none).is_err(), "nothing");
+    expect(parse_args(["a", "b", "c"]).is_err(), "three names");
+    expect(parse_args(["+a", "b"]).is_err(), "leading plus");
+    expectEq(parse_args(["/Y"]).unwrap_err(), "The syntax of the command is incorrect.", "message");
 }
 
-func test_command_and_operands(): void {
-    let opts = parse_args(["hello", "Ann"]).unwrap();
-    expectEq(opts.command, "hello", "command");
-    expectEq(opts.operands.len(), 1, "one operand");
-    expectEq(opts.operands[0], "Ann", "operand");
+func test_modes_are_positional(): void {
+    let before = parse_args(["/A", "a", "b"]).unwrap();
+    expectEq(before.sources[0].mode, MODE_ASCII, "/A before a source");
+    expectEq(before.dest.mode, MODE_ASCII, "... and what follows");
+    let after = parse_args(["a", "/B", "+", "b", "/A", "c"]).unwrap();
+    expectEq(after.sources[0].mode, MODE_BINARY, "/B after a source");
+    expectEq(after.sources[1].mode, MODE_ASCII, "/A after the second");
+    expectEq(after.dest.mode, MODE_ASCII, "carried on");
+    expectEq(parse_args(["a", "b"]).unwrap().sources[0].mode, MODE_DEFAULT, "not said");
 }
 
-func test_flags_anywhere(): void {
-    let opts = parse_args(["-v", "hello", "--shout", "Ann"]).unwrap();
-    expect(opts.verbose, "verbose");
-    expect(opts.shout, "shout");
-    expectEq(opts.command, "hello", "command");
-    expectEq(opts.operands[0], "Ann", "operand");
+func test_switches(): void {
+    let opts = parse_args(["/V", "-y", "a", "b"]).unwrap();
+    expect(opts.verify, "/V");
+    expectEq(opts.confirm, CONFIRM_NEVER, "/Y");
+    expectEq(parse_args(["/Y", "/-Y", "a", "b"]).unwrap().confirm, CONFIRM_ASK, "last wins");
+    expectEq(parse_args(["/D", "/N", "/Z", "/L", "a", "b"]).unwrap().sources.len(), 1, "ignored switches");
+    expectEq(parse_args(["/tmp/a.txt", "-x"]).unwrap().dest.name, "-x", "paths");
+}
+
+func test_copycmd(): void {
+    expectEq(copycmd_confirm("/y"), CONFIRM_NEVER, "/y");
+    expect(should_ask(CONFIRM_DEFAULT, ""), "asks by default");
+    expect(!should_ask(CONFIRM_DEFAULT, "/Y"), "COPYCMD=/Y");
+    expect(should_ask(CONFIRM_ASK, "/Y"), "/-Y wins");
 }
 
 func test_help_and_version(): void {
-    expect(parse_args(["--help"]).unwrap().help, "--help");
-    expect(parse_args(["-h"]).unwrap().help, "-h");
+    expect(parse_args(["/?"]).unwrap().help, "/?");
+    expect(parse_args(["a", "-?"]).unwrap().help, "-?");
     expect(parse_args(["--version"]).unwrap().version, "--version");
-    expect(parse_args(["-V"]).unwrap().version, "-V");
-}
-
-func test_value_option_forms(): void {
-    expectEq(parse_args(["-g", "Hi"]).unwrap().greeting, "Hi", "-g VALUE");
-    expectEq(parse_args(["--greeting", "Hi"]).unwrap().greeting, "Hi", "--greeting VALUE");
-    expectEq(parse_args(["--greeting=a=b"]).unwrap().greeting, "a=b", "--greeting=VALUE keeps '='");
-}
-
-func test_double_dash_ends_options(): void {
-    let opts = parse_args(["hello", "--", "--shout"]).unwrap();
-    expect(!opts.shout, "--shout after -- is an operand");
-    expectEq(opts.operands[0], "--shout", "operand");
-}
-
-func test_lone_dash_is_operand(): void {
-    let opts = parse_args(["hello", "-"]).unwrap();
-    expectEq(opts.operands[0], "-", "operand");
-}
-
-func test_unknown_option(): void {
-    expectEq(parse_args(["--nope"]).unwrap_err(), "unknown option '--nope'", "error message");
-}
-
-func test_missing_value(): void {
-    expectEq(parse_args(["-g"]).unwrap_err(), "option '-g' requires a value", "error message");
-}
-
-func test_flag_with_value(): void {
-    expectEq(parse_args(["--shout=1"]).unwrap_err(), "option '--shout' does not take a value", "error message");
+    let ended = parse_args(["--", "/A", "b"]).unwrap();
+    expectEq(names(ended), "/A", "a switch after -- is a name");
 }

@@ -1,0 +1,77 @@
+@mode(host.dual)
+
+# Tests for planning copies (commands/plan.loup), in trees under build/tmp/.
+
+from debug.assert import (expect, expectEq);
+from io.fs import (createDir, writeText, removeDir, isDir);
+from cli.args import (parse_args);
+from commands.plan import (Plan, plan_copy);
+from win.messages import (MSG_FILE_NOT_FOUND, MSG_INVALID_NAME, MSG_PATH_NOT_FOUND);
+
+func make_tree(root: string): void {
+    if (isDir(root)) {
+        removeDir(root);
+    }
+    createDir(root + "/sub");
+    createDir(root + "/dst");
+    writeText(root + "/a.txt", "a\n");
+    writeText(root + "/b.txt", "b\n");
+    writeText(root + "/sub/c.txt", "c\n");
+}
+
+func plan_for(argv: list[string]): Plan {
+    return plan_copy(parse_args(argv).unwrap());
+}
+
+func test_plain_copies(): void {
+    let root = "build/tmp/copy_plain";
+    make_tree(root);
+    let one = plan_for([root + "\\a.txt", root + "\\new.txt"]);
+    expectEq(one.jobs.len(), 1, "one job");
+    expectEq(one.jobs[0].dest, root + "/new.txt", "to a name");
+    expect(!one.combine and !one.show_names, "a plain copy");
+    expect(!one.jobs[0].sources[0].text and !one.jobs[0].text_dest, "binary by default");
+    expectEq(plan_for([root + "/a.txt", root + "/dst"]).jobs[0].dest, root + "/dst/a.txt", "into a directory");
+    let wild = plan_for([root + "/*.txt", root + "/dst/"]);
+    expectEq(wild.jobs.len(), 2, "one job per file");
+    expect(wild.show_names and !wild.combine, "names shown");
+    let rename = plan_for([root + "/*.txt", root + "/dst/*.bak"]);
+    expectEq(rename.jobs[1].dest, root + "/dst/b.bak", "wildcard destination");
+    let here = plan_for([root + "/sub/c.txt"]);
+    expectEq(here.jobs[0].dest, "c.txt", "no destination: the current directory");
+    removeDir(root);
+}
+
+func test_combining(): void {
+    let root = "build/tmp/copy_combine";
+    make_tree(root);
+    let joined = plan_for([root + "/a.txt+" + root + "/b.txt", root + "/ab.txt"]);
+    expect(joined.combine, "joined");
+    expectEq(joined.jobs.len(), 1, "one destination");
+    expectEq(joined.jobs[0].sources.len(), 2, "two sources");
+    expect(joined.jobs[0].sources[0].text and joined.jobs[0].text_dest, "text by default");
+    let binary = plan_for(["/B", root + "/a.txt+" + root + "/b.txt", root + "/ab.txt"]);
+    expect(!binary.jobs[0].sources[1].text and !binary.jobs[0].text_dest, "/B");
+    let pattern = plan_for([root + "/*.txt", root + "/all.txt"]);
+    expect(pattern.combine, "a pattern to one file combines");
+    let append = plan_for([root + "/a.txt+" + root + "/b.txt"]);
+    expect(append.jobs[0].append, "appends to the first");
+    expectEq(append.jobs[0].dest, root + "/a.txt", "the first source");
+    expect(append.jobs[0].text_dest, "text when combining");
+    let append_b = plan_for(["/B", root + "/a.txt+" + root + "/b.txt"]);
+    expect(!append_b.jobs[0].text_dest, "/B: the first source's mode");
+    removeDir(root);
+}
+
+func test_errors(): void {
+    let root = "build/tmp/copy_errors";
+    make_tree(root);
+    expectEq(plan_for([root + "/none.txt", root + "/dst"]).error, MSG_FILE_NOT_FOUND, "missing");
+    expectEq(plan_for([root + "/no/a.txt", root + "/dst"]).error, MSG_PATH_NOT_FOUND, "missing directory");
+    expectEq(plan_for([root + "/*.none", root + "/dst"]).error, MSG_FILE_NOT_FOUND, "no match");
+    expectEq(plan_for([root + "/s*/c.txt", root + "/dst"]).error, MSG_INVALID_NAME, "wildcard in a directory");
+    expectEq(plan_for([root + "/a.txt", root + "/no/x.txt"]).error, MSG_PATH_NOT_FOUND, "missing target directory");
+    expectEq(plan_for([root + "/a.txt", root + "/new/"]).error, MSG_PATH_NOT_FOUND, "trailing separator");
+    expectEq(plan_for([root + "/a.txt+" + root + "/none.txt", root + "/x"]).error, MSG_FILE_NOT_FOUND, "a missing part");
+    removeDir(root);
+}
