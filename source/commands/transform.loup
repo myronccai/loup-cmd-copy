@@ -4,9 +4,9 @@
 # or `b?.log` gives a source name (copy and ren with a wildcard target).
 #
 # Runtime: host.dual. Compiled into the native binary build/copy by
-# `make build`; `loup run source/main.loup` interprets the same code, and
-# tests/transform_test.loup checks it under Stage0. loup-cmd-ren has the same
-# module.
+# `make build`; `make run` (Stage0's `loup-bootstrap run`) interprets the same
+# code, and tests/transform_test.loup checks it under Stage0. loup-cmd-ren has
+# the same module.
 #
 # The mask is read left to right against a position in the source name:
 #

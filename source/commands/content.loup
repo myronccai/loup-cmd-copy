@@ -4,11 +4,12 @@
 # writing and verifying.
 #
 # Runtime: host.dual. Compiled into the native binary build/copy by
-# `make build`; `loup run source/main.loup` interprets the same code, and
-# tests/content_test.loup runs it under Stage0. Loup 1.26.0 has no bytes
-# concatenation and its native `bytes == bytes` is unreliable, so contents are
-# combined as a list of ints (`bytesFromInts` makes the bytes) and compared
-# byte by byte; native writes fail silently, so every write is read back.
+# `make build`; `make run` (Stage0's `loup-bootstrap run`) interprets the same
+# code, and tests/content_test.loup runs it under Stage0. Loup 1.26.0 has no
+# bytes concatenation and its native `bytes == bytes` is unreliable, so
+# contents are combined as a list of ints (`bytesFromInts` makes the bytes)
+# and compared byte by byte; native writes fail silently, so every write is
+# read back.
 
 from io.fs import (isFile, readBytes, writeBytes);
 
@@ -45,7 +46,7 @@ pub func finish(data: list[int], text_mode: bool): list[int] {
 pub func write_checked(path: string, data: list[int]): bool {
     try {
         writeBytes(path, bytesFromInts(data));
-    } catch (Exception as e) {
+    } catch (IoError) {
         return false;
     }
     return holds(path, data);

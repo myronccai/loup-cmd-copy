@@ -4,8 +4,8 @@
 # before overwriting, writes, checks, and prints `N file(s) copied.`
 #
 # Runtime: host.dual. Compiled into the native binary build/copy by
-# `make build`; `loup run source/main.loup` interprets the same code.
-# tests/copy_test.loup writes jobs under Stage0; tests/e2e.sh runs whole
+# `make build`; `make run` (Stage0's `loup-bootstrap run`) interprets the same
+# code. tests/copy_test.loup writes jobs under Stage0; tests/e2e.sh runs whole
 # copies, questions included, against the native build.
 #
 # Structure: summary_line() and job_bytes() are pure; write_job() writes one
@@ -17,6 +17,7 @@ from appinfo import (EXIT_OK, EXIT_FAILURE);
 from cli.args import (Options, should_ask);
 from commands.content import (append_file, finish, same_files, write_checked);
 from commands.cwd import (absolute_path, current_dir);
+from core.string_utils import (padLeft);
 from commands.plan import (Job, Plan, plan_copy);
 from commands.prompt import (ANSWER_ALL, ANSWER_YES, ask_overwrite);
 from io.fs import (copy, isDir, isFile);
@@ -26,18 +27,9 @@ from win.paths import (display_path);
 pub const MSG_ONTO_ITSELF: string = "The file cannot be copied onto itself.";
 pub const MSG_VERIFY: string = "The copy does not match the source.";
 
-func pad_left(text: string, width: int): string {
-    var parts: list[string] = [];
-    for (i in text.len()..width) {
-        parts.push(" ");
-    }
-    parts.push(text);
-    return parts.join("");
-}
-
 # `        2 file(s) copied.`
 pub func summary_line(count: int): string {
-    return pad_left(str(count), 9) + " file(s) copied.";
+    return padLeft(str(count), 9, " ") + " file(s) copied.";
 }
 
 # The bytes a job writes, read from its sources in their modes.
@@ -49,10 +41,12 @@ pub func job_bytes(job: Job): list[int] {
     return finish(data, job.text_dest);
 }
 
+# io.fs.copy, ignoring the IoError Stage0 throws when it fails (native
+# builds fail silently); write_job() checks the result on disk.
 func try_copy(src: string, dst: string): void {
     try {
         copy(src, dst);
-    } catch (Exception as e) {
+    } catch (IoError) {
     }
 }
 

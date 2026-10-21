@@ -63,7 +63,7 @@ Loup Lite comes from <https://github.com/code-craft-ai-company/loup-releases>;
 
 | Task | Command | Notes |
 |------|---------|-------|
-| Run from source | `make run ARGS="a.txt+b.txt c.txt"` | `loup run source/main.loup -- ARGS` |
+| Run from source | `make run ARGS="a.txt+b.txt c.txt"` | `loup-bootstrap run source/main.loup -- ARGS` (Stage0: questions read no stdin there, use `/Y`) |
 | Type-check | `make check` | checks `source/main.loup` and every module it imports; tests are not checked |
 | Run all tests | `make test` | every `tests/*_test.loup`, one at a time (`--no-parallel`) |
 | Run matching tests | `make test TEST_ARGS="--filter comb"` | tests whose name contains `comb` |

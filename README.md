@@ -72,7 +72,7 @@ license: <https://code-craft.ai/loup/license>.
 ```sh
 make build                     # native binary: build/copy
 make ci                        # check, unit tests, build, end-to-end tests
-make run ARGS="a.txt+b.txt c.txt"   # run from source with loup run
+make run ARGS="a.txt+b.txt c.txt"   # run from source (Stage0's interpreter)
 ```
 
 Quote operands that contain `\`, `*` or `?` so that the Linux shell passes
@@ -168,6 +168,10 @@ itself, or a file that could not be written.
   case.
 - `/?` prints a short help text of this recreation, not Windows' own.
   Messages end with LF, not CRLF.
+- `make run` uses Stage0's interpreter (`loup-bootstrap run`), where a child
+  process gets no standard input: `Overwrite X? (Yes/No/All):` is answered No
+  there, so use `/Y`. Under the self-hosted `loup run` the question
+  would repeat forever.
 
 ## Layout
 

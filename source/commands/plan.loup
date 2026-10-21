@@ -4,8 +4,8 @@
 # mode. Pure apart from looking at the file system.
 #
 # Runtime: host.dual. Compiled into the native binary build/copy by
-# `make build`; `loup run source/main.loup` interprets the same code, and
-# tests/plan_test.loup plans copies of fixture trees under Stage0.
+# `make build`; `make run` (Stage0's `loup-bootstrap run`) interprets the same
+# code, and tests/plan_test.loup plans copies of fixture trees under Stage0.
 #
 # The rules:
 #
@@ -19,9 +19,10 @@
 # - A destination with wildcards renames each file (`*.txt` to `*.bak`).
 #
 # Structure: find_source() resolves one source; plan_copy() collects every
-# source with its mode, classifies the destination (a directory, one file
-# name, or a wildcard mask), and then makes one Job for a combination or one
-# Job per source file.
+# source with its mode, classifies the destination as a local `enum Dest` (a
+# directory, one file name, or a wildcard mask), and then makes one Job for a
+# combination or one Job per source file, naming each destination with its
+# nested function dest_for().
 
 from cli.args import (FileArg, Options, MODE_ASCII, MODE_DEFAULT);
 from commands.transform import (transform_name);
@@ -91,9 +92,7 @@ func find_source(name: string): Found {
     }
     let p = strip_trailing_separators(fs_path(name));
     if (p.len() > 0 and isDir(p)) {
-        for (entry in list_matches(p, "*", MATCH_FILES)) {
-            paths.push(join_path(p, entry));
-        }
+        paths = [join_path(p, entry) for entry in list_matches(p, "*", MATCH_FILES)];
         let error = if (paths.len() == 0) { MSG_FILE_NOT_FOUND } else { "" };
         return Found(paths = paths, many = true, error = error);
     }
@@ -108,12 +107,12 @@ func find_source(name: string): Found {
     return Found(paths = paths, many = false, error = MSG_FILE_NOT_FOUND);
 }
 
-# Where the destination says files go.
-const DEST_DIR: int = 0;       # into a directory (keep the names)
-const DEST_FILE: int = 1;      # one file name
-const DEST_PATTERN: int = 2;   # rename each file with a wildcard mask
-
 pub func plan_copy(opts: Options): Plan {
+    # Where the destination says files go: into a directory (keeping the
+    # names), to one file name, or renamed by a wildcard mask. Only this
+    # function needs to know, so the enum is declared here.
+    enum Dest { Dir, File, Pattern }
+
     # Sources, with their modes.
     var paths: list[string] = [];
     var modes: list[int] = [];
@@ -133,7 +132,7 @@ pub func plan_copy(opts: Options): Plan {
     }
 
     # The destination.
-    var kind = DEST_DIR;
+    var kind = Dest.Dir;
     var target = "";
     var dest_mode = MODE_DEFAULT;
     if (opts.has_dest) {
@@ -144,15 +143,15 @@ pub func plan_copy(opts: Options): Plan {
             return plan_error(MSG_INVALID_NAME);
         }
         if (has_wildcards(target)) {
-            kind = DEST_PATTERN;
+            kind = Dest.Pattern;
             let parent = split_path(target).dir;
             if (parent.len() > 0 and !isDir(parent)) {
                 return plan_error(MSG_PATH_NOT_FOUND);
             }
         } else if (isDir(target)) {
-            kind = DEST_DIR;
+            kind = Dest.Dir;
         } else {
-            kind = DEST_FILE;
+            kind = Dest.File;
             let parent = parent_dir(target);
             if (d.len() > target.len() or (parent.len() > 0 and !isDir(parent))) {
                 return plan_error(MSG_PATH_NOT_FOUND);
@@ -162,38 +161,36 @@ pub func plan_copy(opts: Options): Plan {
 
     # The jobs: one Job that reads every source when combining, else one
     # Job per source file, each destination named by the destination kind.
-    let combine = opts.joined or (kind == DEST_FILE and (many or paths.len() > 1));
+    let combine = opts.joined or (kind == Dest.File and (many or paths.len() > 1));
     var jobs: list[Job] = [];
+
+    # The file a source goes to (without a destination, `target` is "" and
+    # the kind Dir: the current directory, under the source's own name).
+    func dest_for(src: string): string {
+        if (kind == Dest.Dir) {
+            return join_path(target, base_name(src));
+        }
+        if (kind == Dest.Pattern) {
+            let parts = split_path(target);
+            return join_path(parts.dir, transform_name(base_name(src), parts.name));
+        }
+        return target;
+    }
+
     if (combine) {
         var sources: list[SourceFile] = [];
         for (k in 0..paths.len()) {
             sources.push(make_source(paths[k], is_text(modes[k], true)));
         }
-        var dest = target;
-        var append = false;
-        if (!opts.has_dest) {
+        if (opts.has_dest) {
+            jobs.push(make_job(dest_for(paths[0]), sources, is_text(dest_mode, true), false));
+        } else {
             # Appending to the first source: it is written in its own mode.
-            dest = paths[0];
-            append = true;
-            dest_mode = modes[0];
-        } else if (kind == DEST_DIR) {
-            dest = join_path(target, base_name(paths[0]));
-        } else if (kind == DEST_PATTERN) {
-            let parts = split_path(target);
-            dest = join_path(parts.dir, transform_name(base_name(paths[0]), parts.name));
+            jobs.push(make_job(paths[0], sources, is_text(modes[0], true), true));
         }
-        jobs.push(make_job(dest, sources, is_text(dest_mode, true), append));
     } else {
         for (k in 0..paths.len()) {
-            let src = paths[k];
-            var dest = target;
-            if (kind == DEST_DIR) {
-                dest = join_path(target, base_name(src));
-            } else if (kind == DEST_PATTERN) {
-                let parts = split_path(target);
-                dest = join_path(parts.dir, transform_name(base_name(src), parts.name));
-            }
-            jobs.push(make_job(dest, [make_source(src, is_text(modes[k], false))],
+            jobs.push(make_job(dest_for(paths[k]), [make_source(paths[k], is_text(modes[k], false))],
                 is_text(dest_mode, false), false));
         }
     }

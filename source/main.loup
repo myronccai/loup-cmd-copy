@@ -5,11 +5,12 @@
 # argument list.
 #
 # Runtime: host.dual. The entry point: main() gets the command line. The same
-# source runs two ways: `make run ARGS="..."` interprets it with
-# `loup run source/main.loup`, and `make build` compiles it with the rest of
-# source/ into the native binary build/copy, which `make e2e` (tests/e2e.sh)
-# and CI run. Under `make run` an `Overwrite ...?` question repeats forever
-# (see commands/prompt.loup): give /Y there.
+# source runs two ways: `make build` compiles it with the rest of source/ into
+# the native binary build/copy, which `make e2e` (tests/e2e.sh) and CI run;
+# `make run ARGS="..."` interprets it with Stage0's
+# `loup-bootstrap run source/main.loup`, not the self-hosted `loup run` (the
+# Makefile says why), and there every `Overwrite ...?` question is answered
+# No.
 
 from cli.app import (run);
 

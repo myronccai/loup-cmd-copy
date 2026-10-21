@@ -7,7 +7,8 @@
 # them, until the next /A or /B.
 #
 # Runtime: host.dual. Compiled into the native binary build/copy by
-# `make build`; `loup run source/main.loup` interprets the same code.
+# `make build`; `make run` (Stage0's `loup-bootstrap run`) interprets the same
+# code.
 #
 # Structure: parse_switches() finds a help or version request. parse_args()
 # then walks argv itself, in two passes: first into a stream of names and `+`
