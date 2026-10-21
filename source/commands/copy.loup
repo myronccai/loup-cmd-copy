@@ -1,7 +1,17 @@
 @mode(host.dual)
 
-# copy: carries out a plan (commands/plan.loup): prints the source names,
-# asks before overwriting, writes, checks, and prints `N file(s) copied.`
+# copy: carries out a plan (commands/plan.loup): prints the source names, asks
+# before overwriting, writes, checks, and prints `N file(s) copied.`
+#
+# Runtime: host.dual. Compiled into the native binary build/copy by
+# `make build`; `loup run source/main.loup` interprets the same code.
+# tests/copy_test.loup writes jobs under Stage0; tests/e2e.sh runs whole
+# copies, questions included, against the native build.
+#
+# Structure: summary_line() and job_bytes() are pure; write_job() writes one
+# Job, with io.fs.copy for a plain binary copy and the bytes of content.loup
+# otherwise, and checks the result; run_copy() plans, asks, writes and is the
+# only function that prints.
 
 from appinfo import (EXIT_OK, EXIT_FAILURE);
 from cli.args import (Options, should_ask);

@@ -1,6 +1,11 @@
 @mode(host.dual)
 
-# The wildcard transform, table-driven: source name, target mask, result.
+# Unit tests for the wildcard transform (commands/transform.loup),
+# table-driven: source name, target mask, result.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this file
+# with `loup-bootstrap test --no-parallel` (Stage0, source/ on LOUPPATH), one
+# test per `func test_*()`. It is not part of the binary.
 
 from debug.assert import (expectEq);
 from commands.transform import (transform_name);

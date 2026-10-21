@@ -1,9 +1,14 @@
 @mode(host.dual)
 
-# The cmd.exe wildcard transform: the new name a target mask such as
-# `*.bak` or `b?.log` gives a source name (copy and ren with a wildcard
-# target). The mask is read left to right against a position in the source
-# name:
+# The cmd.exe wildcard transform: the new name a target mask such as `*.bak`
+# or `b?.log` gives a source name (copy and ren with a wildcard target).
+#
+# Runtime: host.dual. Compiled into the native binary build/copy by
+# `make build`; `loup run source/main.loup` interprets the same code, and
+# tests/transform_test.loup checks it under Stage0. loup-cmd-ren has the same
+# module.
+#
+# The mask is read left to right against a position in the source name:
 #
 #   ?        copy the next source character unless it is `.` or the end
 #            (then copy nothing and stay)
@@ -36,6 +41,8 @@ pub func transform_name(source: string, mask: string): string {
     let m = chars_of(mask);
     let n = src.len();
     var out: list[string] = [];
+    # `i` walks the mask and `pos` the source name; each branch below is
+    # one row of the table in the header.
     var pos = 0;
     var i = 0;
     while (i < m.len()) {
@@ -85,6 +92,7 @@ pub func transform_name(source: string, mask: string): string {
             i += 1;
         }
     }
+    # Windows names cannot end with `.` or a space.
     var end = out.len();
     while (end > 0 and (out[end - 1] == "." or out[end - 1] == " ")) {
         end -= 1;

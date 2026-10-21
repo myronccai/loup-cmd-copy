@@ -1,7 +1,13 @@
 @mode(host.dual)
 
-# Planning a copy: which files are read, which files are written, and in
-# which mode. Pure apart from looking at the file system.
+# Planning a copy: which files are read, which files are written, and in which
+# mode. Pure apart from looking at the file system.
+#
+# Runtime: host.dual. Compiled into the native binary build/copy by
+# `make build`; `loup run source/main.loup` interprets the same code, and
+# tests/plan_test.loup plans copies of fixture trees under Stage0.
+#
+# The rules:
 #
 # - Sources are files, patterns (matching files) or directories (their
 #   files), joined with `+`.
@@ -11,6 +17,11 @@
 # - Without a destination, files go to the current directory; joined
 #   sources without a destination are appended to the first one.
 # - A destination with wildcards renames each file (`*.txt` to `*.bak`).
+#
+# Structure: find_source() resolves one source; plan_copy() collects every
+# source with its mode, classifies the destination (a directory, one file
+# name, or a wildcard mask), and then makes one Job for a combination or one
+# Job per source file.
 
 from cli.args import (FileArg, Options, MODE_ASCII, MODE_DEFAULT);
 from commands.transform import (transform_name);
@@ -149,6 +160,8 @@ pub func plan_copy(opts: Options): Plan {
         }
     }
 
+    # The jobs: one Job that reads every source when combining, else one
+    # Job per source file, each destination named by the destination kind.
     let combine = opts.joined or (kind == DEST_FILE and (many or paths.len() > 1));
     var jobs: list[Job] = [];
     if (combine) {

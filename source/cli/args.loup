@@ -3,8 +3,17 @@
 # Command-line parsing for copy. The shared Windows switch parser
 # (win/switches.loup) recognises the switches; this module adds what is
 # special about copy: `+` joins sources (`a+b`, `a + b`), and /A and /B are
-# positional: they apply to the file just before them and to every file
-# after them, until the next /A or /B.
+# positional: they apply to the file just before them and to every file after
+# them, until the next /A or /B.
+#
+# Runtime: host.dual. Compiled into the native binary build/copy by
+# `make build`; `loup run source/main.loup` interprets the same code.
+#
+# Structure: parse_switches() finds a help or version request. parse_args()
+# then walks argv itself, in two passes: first into a stream of names and `+`
+# signs, each name with the mode in force, then reading that stream as
+# `source (+ source)* [destination]`. copycmd_confirm() and should_ask()
+# decide whether to ask before overwriting.
 
 from win.messages import (MSG_SYNTAX);
 from win.switches import (SwitchSpec, flag, parse_switches, switch_error_message);
@@ -107,6 +116,8 @@ pub func parse_args(argv: list[string]): Result[Options, string] {
         if (names.len() > 0) {
             for (name in names) {
                 if (name == "A" or name == "B") {
+                    # The new mode holds from here on, and also for the
+                    # name just before the switch (`a.txt /B`).
                     mode = if (name == "A") { MODE_ASCII } else { MODE_BINARY };
                     if (after_name) {
                         modes[modes.len() - 1] = mode;

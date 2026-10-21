@@ -1,6 +1,11 @@
 @mode(host.dual)
 
-# Tests for planning copies (commands/plan.loup), in trees under build/tmp/.
+# Unit tests for planning copies (commands/plan.loup), in trees under
+# build/tmp/: plain copies, combining, and the errors that stop a copy.
+#
+# Runtime: host.dual, run by the test runner: `make test` interprets this file
+# with `loup-bootstrap test --no-parallel` (Stage0, source/ on LOUPPATH), one
+# test per `func test_*()`. It is not part of the binary.
 
 from debug.assert import (expect, expectEq);
 from io.fs import (createDir, writeText, removeDir, isDir);

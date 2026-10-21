@@ -1,7 +1,15 @@
 @mode(host.dual)
 
-# Entry point. Keep this file thin: all behaviour lives in cli.app.run so
-# that tests can call it with an argument list.
+# copy: entry point of the Windows COPY command for Linux. Keep this file
+# thin: all behaviour lives in cli.app.run so that tests can call it with an
+# argument list.
+#
+# Runtime: host.dual. The entry point: main() gets the command line. The same
+# source runs two ways: `make run ARGS="..."` interprets it with
+# `loup run source/main.loup`, and `make build` compiles it with the rest of
+# source/ into the native binary build/copy, which `make e2e` (tests/e2e.sh)
+# and CI run. Under `make run` an `Overwrite ...?` question repeats forever
+# (see commands/prompt.loup): give /Y there.
 
 from cli.app import (run);
 
